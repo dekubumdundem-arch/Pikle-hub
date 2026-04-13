@@ -1,0 +1,325 @@
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+local char, hum, root
+
+local function hookCharacter(c)
+	char = c
+	hum = c:WaitForChild("Humanoid")
+	root = c:WaitForChild("HumanoidRootPart")
+end
+
+hookCharacter(player.Character or player.CharacterAdded:Wait())
+player.CharacterAdded:Connect(hookCharacter)
+
+local state = {
+	enabled = true,
+
+	fly = false,
+	noclip = false,
+	sprint = false,
+	infJump = false,
+	spin = false,
+	walkFling = false,
+
+	speed = 16,
+	jump = 50
+}
+
+local gui, main, mini
+local flyVel
+local connections = {}
+
+local function add(c)
+	table.insert(connections, c)
+end
+
+local function cleanup()
+	for _,c in ipairs(connections) do
+		pcall(function() c:Disconnect() end)
+	end
+	table.clear(connections)
+end
+
+local function stopFly()
+	if flyVel then
+		flyVel:Destroy()
+		flyVel = nil
+	end
+end
+
+local function openUI()
+	if not state.enabled then return end
+	if main and mini then
+		main.Visible = true
+		mini.Visible = false
+	end
+end
+
+local function minimizeUI()
+	if main and mini then
+		main.Visible = false
+		mini.Visible = true
+	end
+end
+
+local function shutdown()
+	state.enabled = false
+
+	for k in pairs(state) do
+		if type(state[k]) == "boolean" then
+			state[k] = false
+		end
+	end
+
+	stopFly()
+	cleanup()
+
+	if hum then
+		hum.WalkSpeed = 16
+		hum.JumpPower = 50
+	end
+
+	camera.FieldOfView = 70
+
+	if gui then gui:Destroy() end
+	gui, main, mini = nil, nil, nil
+end
+
+gui = Instance.new("ScreenGui")
+gui.Name = "PikleHub"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+main = Instance.new("Frame")
+main.Size = UDim2.new(0, 360, 0, 460)
+main.Position = UDim2.new(0.2, 0, 0.2, 0)
+main.BackgroundColor3 = Color3.fromRGB(25,25,25)
+main.Active = true
+main.Draggable = true
+main.Parent = gui
+Instance.new("UICorner", main).CornerRadius = UDim.new(0,12)
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -120, 0, 35)
+title.Position = UDim2.new(0,10,0,0)
+title.Text = "🟣 PIKLE HUB"
+title.TextColor3 = Color3.new(1,1,1)
+title.BackgroundTransparency = 1
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = main
+
+mini = Instance.new("TextButton")
+mini.Size = UDim2.new(0, 60, 0, 60)
+mini.Position = UDim2.new(0.1, 0, 0.5, 0)
+mini.BackgroundColor3 = Color3.fromRGB(40,40,40)
+mini.Text = "P"
+mini.TextSize = 28
+mini.TextColor3 = Color3.new(1,1,1)
+mini.Visible = false
+mini.Active = true
+mini.Draggable = true
+mini.Parent = gui
+Instance.new("UICorner", mini).CornerRadius = UDim.new(1,0)
+
+mini.MouseButton1Down:Connect(openUI)
+
+local function topBtn(txt, x)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(0, 35, 0, 35)
+	b.Position = UDim2.new(1, x, 0, 0)
+	b.Text = txt
+	b.TextColor3 = Color3.new(1,1,1)
+	b.BackgroundColor3 = Color3.fromRGB(60,60,60)
+	b.Parent = main
+	Instance.new("UICorner", b).CornerRadius = UDim.new(0,6)
+	return b
+end
+
+local minBtn = topBtn("_", -75)
+local closeBtn = topBtn("X", -35)
+
+minBtn.MouseButton1Click:Connect(minimizeUI)
+closeBtn.MouseButton1Click:Connect(shutdown)
+
+local function makeBtn(text, y)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(0.9,0,0,30)
+	b.Position = UDim2.new(0.05,0,0,y)
+	b.BackgroundColor3 = Color3.fromRGB(45,45,45)
+	b.TextColor3 = Color3.new(1,1,1)
+	b.Text = text
+	b.Parent = main
+	Instance.new("UICorner", b).CornerRadius = UDim.new(0,6)
+	return b
+end
+
+local y = 50
+
+local flyBtn = makeBtn("Fly: OFF", y) y += 35
+local noclipBtn = makeBtn("Noclip: OFF", y) y += 35
+local sprintBtn = makeBtn("Sprint (LCTRL): OFF", y) y += 35
+local infBtn = makeBtn("Infinite Jump: OFF", y) y += 35
+local spinBtn = makeBtn("Spin: OFF", y) y += 35
+local flingBtn = makeBtn("Walk Fling (broken): OFF", y) y += 35
+
+local resetBtn = makeBtn("Reset Character", y) y += 35
+local rejoinBtn = makeBtn("Rejoin Server", y)
+
+local flingDebounce = {}
+
+local function flingTarget(otherChar)
+	if not state.walkFling then return end
+	if not root then return end
+	if not otherChar then return end
+	if otherChar == char then return end
+
+	local otherRoot = otherChar:FindFirstChild("HumanoidRootPart")
+	if not otherRoot then return end
+
+	if flingDebounce[otherChar] then return end
+	flingDebounce[otherChar] = true
+
+	local dir = (otherRoot.Position - root.Position)
+	if dir.Magnitude == 0 then return end
+	dir = dir.Unit
+
+	local impulse = (dir * 140 + Vector3.new(0, 80, 0)) * otherRoot.AssemblyMass
+	otherRoot:ApplyImpulse(impulse)
+
+	task.delay(0.5, function()
+		flingDebounce[otherChar] = nil
+	end)
+end
+
+local function bindFling(character)
+	if not character then return end
+
+	for _,part in ipairs(character:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.Touched:Connect(function(hit)
+				if not state.walkFling then return end
+
+				local otherChar = hit:FindFirstAncestorOfClass("Model")
+				if not otherChar then return end
+				if otherChar == character then return end
+
+				flingTarget(otherChar)
+			end)
+		end
+	end
+end
+
+bindFling(char)
+
+player.CharacterAdded:Connect(function(c)
+	task.wait(0.5)
+	hookCharacter(c)
+	bindFling(c)
+end)
+
+flyBtn.MouseButton1Click:Connect(function()
+	state.fly = not state.fly
+	flyBtn.Text = "Fly: " .. (state.fly and "ON" or "OFF")
+	if not state.fly then stopFly() end
+end)
+
+noclipBtn.MouseButton1Click:Connect(function()
+	state.noclip = not state.noclip
+	noclipBtn.Text = "Noclip: " .. (state.noclip and "ON" or "OFF")
+end)
+
+sprintBtn.MouseButton1Click:Connect(function()
+	state.sprint = not state.sprint
+	sprintBtn.Text = "Sprint (LCTRL): " .. (state.sprint and "ON" or "OFF")
+end)
+
+infBtn.MouseButton1Click:Connect(function()
+	state.infJump = not state.infJump
+	infBtn.Text = "Infinite Jump: " .. (state.infJump and "ON" or "OFF")
+end)
+
+spinBtn.MouseButton1Click:Connect(function()
+	state.spin = not state.spin
+	spinBtn.Text = "Spin: " .. (state.spin and "ON" or "OFF")
+end)
+
+flingBtn.MouseButton1Click:Connect(function()
+	state.walkFling = not state.walkFling
+	flingBtn.Text = "Walk Fling (broken): " .. (state.walkFling and "ON" or "OFF")
+end)
+
+resetBtn.MouseButton1Click:Connect(function()
+	if player.Character then
+		player.Character:BreakJoints()
+	end
+end)
+
+rejoinBtn.MouseButton1Click:Connect(function()
+	TeleportService:Teleport(game.PlaceId, player)
+end)
+
+RunService.RenderStepped:Connect(function()
+	if not state.enabled then return end
+	if not hum or not root then return end
+
+	if state.sprint and UIS:IsKeyDown(Enum.KeyCode.LeftControl) then
+		hum.WalkSpeed = state.speed + 10
+	else
+		hum.WalkSpeed = state.speed
+	end
+
+	hum.JumpPower = state.jump
+	camera.FieldOfView = 70
+
+	-- fly
+	if state.fly then
+		if not flyVel then
+			flyVel = Instance.new("BodyVelocity")
+			flyVel.MaxForce = Vector3.new(1e9,1e9,1e9)
+			flyVel.Parent = root
+		end
+
+		local dir = Vector3.zero
+		local cam = camera
+
+		if UIS:IsKeyDown(Enum.KeyCode.W) then dir += cam.CFrame.LookVector end
+		if UIS:IsKeyDown(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector end
+		if UIS:IsKeyDown(Enum.KeyCode.A) then dir -= cam.CFrame.RightVector end
+		if UIS:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
+		if UIS:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0,1,0) end
+		if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then dir -= Vector3.new(0,1,0) end
+
+		flyVel.Velocity = dir.Magnitude > 0 and dir.Unit * 60 or Vector3.zero
+	else
+		stopFly()
+	end
+
+	-- noclip
+	if state.noclip then
+		for _,v in ipairs(char:GetDescendants()) do
+			if v:IsA("BasePart") then
+				v.CanCollide = false
+			end
+		end
+	end
+
+	-- spin
+	if state.spin and root then
+		root.CFrame *= CFrame.Angles(0, math.rad(8), 0)
+	end
+end)
+
+-- infinite jump
+UIS.JumpRequest:Connect(function()
+	if state.infJump and hum then
+		hum:ChangeState(Enum.HumanoidStateType.Jumping)
+	end
+end)
+
+print("PIKLE HUB v1 LOADED")
