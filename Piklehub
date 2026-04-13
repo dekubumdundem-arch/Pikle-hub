@@ -108,7 +108,7 @@ Instance.new("UICorner", main).CornerRadius = UDim.new(0,12)
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -120, 0, 35)
 title.Position = UDim2.new(0,10,0,0)
-title.Text = "🟣 PIKLE HUB"
+title.Text = "🟣 PIKLE HUB v2 (crash fix)"
 title.TextColor3 = Color3.new(1,1,1)
 title.BackgroundTransparency = 1
 title.TextXAlignment = Enum.TextXAlignment.Left
@@ -322,4 +322,4 @@ UIS.JumpRequest:Connect(function()
 	end
 end)
 
-print("PIKLE HUB v1 LOADED")
+print("PIKLE HUB v2 LOADED")
