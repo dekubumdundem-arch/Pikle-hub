@@ -269,7 +269,7 @@ RunService.RenderStepped:Connect(function()
 	if not hum or not root then return end
 
 	if state.sprint and UIS:IsKeyDown(Enum.KeyCode.LeftControl) then
-		hum.WalkSpeed = state.speed + 10
+		hum.WalkSpeed = state.speed + 30
 	else
 		hum.WalkSpeed = state.speed
 	end
